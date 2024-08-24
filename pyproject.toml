@@ -10,7 +10,11 @@ python = ">=3.10,<=3.12"
 prophet = "^1.1.5"
 neuralprophet = "^0.9.0"
 
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.packages]
+# time-series-analysis 패키지의 하위 디렉토리를 명시적으로 지정
+include = ["changepoint_detection"]
+#include = ["changepoint_detection", "forecast", "another_directory"]
