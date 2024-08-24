@@ -1,6 +1,7 @@
 import os
 import pickle
 from .utils import load_model
+import pandas as pd
 
 
 def inference_prophet(df, scale, checkpoint_dir="checkpoint"):
@@ -11,9 +12,9 @@ def inference_prophet(df, scale, checkpoint_dir="checkpoint"):
     model = load_model(model_path)
 
     # 추론 (changepoint 확인)
-    changepoints = model.predict(df[["ds"]])["changepoint"]
+    changepoints = model.changepoints
 
-    return changepoints.dropna().tolist()
+    return changepoints.tolist()
 
 
 def inference_neuralprophet(df, checkpoint_dir="checkpoint"):
@@ -23,7 +24,13 @@ def inference_neuralprophet(df, checkpoint_dir="checkpoint"):
     # 모델 로드
     model = load_model(model_path)
 
-    # 추론 (changepoint 확인)
-    changepoints = model.model.find_changepoints(df["y"].values)
+    # NeuralProphet의 예측 수행
+    forecast = model.predict(df)
 
-    return changepoints.tolist()
+    # Changepoint를 추출하는 방식으로 트렌드의 변화를 확인
+    if "trend_change" in forecast.columns:
+        changepoints = forecast.loc[forecast["trend_change"].notnull(), "ds"].tolist()
+    else:
+        changepoints = []
+
+    return changepoints
