@@ -40,12 +40,12 @@ jobs:
     - name: Create Git tag
       if: env.TAG_EXISTS == 'false'
       env:
-        PAT_TOKEN: ${{ secrets.URF_PAT }}
+        PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         git config user.name "github-actions"
         git config user.email "github-actions@github.com"
         git tag v${{ env.VERSION }}
-        git push https://${{ secrets.URF_PAT }}@github.com/urf94/time_series_analysis.git v${{ env.VERSION }}
+        git push https://${{ secrets.PAT_TOKEN }}@github.com/urf94/time_series_analysis.git v${{ env.VERSION }}
 
     - name: Install dependencies
       run: poetry install --no-dev
@@ -53,12 +53,15 @@ jobs:
     - name: Build package
       run: poetry build
 
+    - name: List build artifacts
+      run: ls -al ./dist
+
     - name: Create Release
       if: env.TAG_EXISTS == 'false'
       id: create_release
       uses: actions/create-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.URF_PAT }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       with:
         tag_name: v${{ env.VERSION }}
         release_name: v${{ env.VERSION }}
