@@ -56,8 +56,11 @@ jobs:
     - name: List build artifacts
       run: ls -al ./dist
 
+    - name: Get WHL file name
+      id: get_whl_name
+      run: echo "WHL_NAME=$(ls ./dist/*.whl)" >> $GITHUB_ENV
+
     - name: Create Release
-      if: env.TAG_EXISTS == 'false'
       id: create_release
       uses: actions/create-release@v1
       env:
@@ -69,10 +72,9 @@ jobs:
         prerelease: false
 
     - name: Upload Release Asset
-      if: env.TAG_EXISTS == 'false'
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/*.whl
-        asset_name: time_series_analysis-${{ env.VERSION }}.whl
+        asset_path: ${{ env.WHL_NAME }}
+        asset_name: ${{ env.WHL_NAME }}
         asset_content_type: application/zip
