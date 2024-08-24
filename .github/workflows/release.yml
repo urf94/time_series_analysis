@@ -27,14 +27,17 @@ jobs:
         VERSION=$(poetry version -s)
         echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-    - name: Get latest tag
-      id: get_latest_tag
+    - name: Check if tag exists
+      id: check_tag_exists
       run: |
-        LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "none")
-        echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+        if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
+          echo "TAG_EXISTS=true" >> $GITHUB_ENV
+        else
+          echo "TAG_EXISTS=false" >> $GITHUB_ENV
+      shell: bash
 
-    - name: Compare versions and create tag
-      if: env.LATEST_TAG == 'none' || steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
+    - name: Create Git tag
+      if: env.TAG_EXISTS == 'false'
       env:
         PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
@@ -50,7 +53,7 @@ jobs:
       run: poetry build
 
     - name: Create Release
-      if: env.LATEST_TAG == 'none' || steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
+      if: env.TAG_EXISTS == 'false'
       id: create_release
       uses: actions/create-release@v1
       env:
@@ -62,10 +65,8 @@ jobs:
         prerelease: false
 
     - name: Upload Release Asset
-      if: env.LATEST_TAG == 'none' || steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
+      if: env.TAG_EXISTS == 'false'
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/*.whl
-        asset_name: time_series_analysis-${{ env.VERSION }}.whl
-        asset_content_type: application/zip
+
