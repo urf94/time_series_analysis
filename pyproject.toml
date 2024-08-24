@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "time-series-analysis"
 version = "0.1.0"
-description = ""
+description = "A time series analysis package"
 authors = ["urf94 <urf@mercuryproject.com>"]
 readme = "README.md"
+packages = [{ include = "changepoint_detection" }]  # 패키지 경로 설정
 
 [tool.poetry.dependencies]
 python = ">=3.10,<=3.12"
@@ -11,11 +12,5 @@ prophet = "^1.1.5"
 neuralprophet = "^0.9.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.packages]
-packages = [
-    { include = "changepoint_detection" }
-]
-#include = ["changepoint_detection", "forecast", "another_directory"]
