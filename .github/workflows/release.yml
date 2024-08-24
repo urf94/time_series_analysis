@@ -30,11 +30,11 @@ jobs:
     - name: Get latest tag
       id: get_latest_tag
       run: |
-        LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+        LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "none")
         echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
 
     - name: Compare versions and create tag
-      if: steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
+      if: env.LATEST_TAG == 'none' || steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
       env:
         PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
@@ -50,7 +50,7 @@ jobs:
       run: poetry build
 
     - name: Create Release
-      if: steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
+      if: env.LATEST_TAG == 'none' || steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
       id: create_release
       uses: actions/create-release@v1
       env:
@@ -62,7 +62,7 @@ jobs:
         prerelease: false
 
     - name: Upload Release Asset
-      if: steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
+      if: env.LATEST_TAG == 'none' || steps.get_latest_tag.outputs.LATEST_TAG != 'v${{ env.VERSION }}'
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
