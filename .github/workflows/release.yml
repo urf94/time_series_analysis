@@ -40,7 +40,7 @@ jobs:
     - name: Create Git tag
       if: env.TAG_EXISTS == 'false'
       env:
-        PAT_TOKEN: ${{ secrets.URF_PAT }}
+        PAT_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
       run: |
         git config user.name "github-actions"
         git config user.email "github-actions@github.com"
@@ -64,7 +64,7 @@ jobs:
       id: create_release
       uses: actions/create-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.URF_PAT }}
+        GITHUB_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
       with:
         tag_name: v${{ env.VERSION }}
         release_name: v${{ env.VERSION }}
@@ -73,6 +73,8 @@ jobs:
 
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ env.WHL_NAME }}
