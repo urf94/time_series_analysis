@@ -6,7 +6,7 @@ from changepoint_detection.inference import inference_prophet, inference_neuralp
 
 class TestInferenceFunctions(unittest.TestCase):
     def setUp(self):
-        self.checkpoint_dir = "checkpoint"
+        self.checkpoint_dir = "../checkpoint"
         self.df = pd.DataFrame(
             {
                 "ds": pd.date_range(start="2022-01-01", periods=10, freq="D"),
@@ -43,20 +43,14 @@ class TestInferenceFunctions(unittest.TestCase):
             self.fail(f"Prophet inference failed with exception: {e}")
 
     def test_inference_neuralprophet(self):
-        try:
-            changepoints = inference_neuralprophet(
-                self.df, checkpoint_dir=self.checkpoint_dir
-            )
-            self.assertIsInstance(
-                changepoints, list, "NeuralProphet inference should return a list."
-            )
-            self.assertGreaterEqual(
-                len(changepoints), 0, "Changepoints list should not be empty."
-            )
-        except RuntimeError as e:
-            self.fail(f"NeuralProphet inference failed with RuntimeError: {e}")
-        except Exception as e:
-            self.fail(f"NeuralProphet inference failed with exception: {e}")
+        # 절대 경로로 설정
+        checkpoint_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "checkpoint"))
+        print(f"Testing with checkpoint directory: {checkpoint_dir}")
+        assert os.path.exists(checkpoint_dir), f"Checkpoint directory not found: {checkpoint_dir}"
+
+        changepoints = inference_neuralprophet(self.df)
+        self.assertIsInstance(changepoints, list, "NeuralProphet inference should return a list.")
+        self.assertGreaterEqual(len(changepoints), 0, "Changepoints list should not be empty.")
 
 
 if __name__ == "__main__":
