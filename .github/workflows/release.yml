@@ -58,16 +58,11 @@ jobs:
 
     - name: Get WHL file name
       id: get_whl_name
-      run:
-        echo "WHL_NAME=$(ls ./dist/*.whl)"
-        echo "WHL_NAME=$(ls ./dist/*.whl)" >> $GITHUB_ENV
-
-    - name: Rename WHL file
       run: |
         WHL_FILE=$(ls ./dist/*.whl)
-        if [[ "$WHL_FILE" == *default.dist* ]]; then
-          mv "$WHL_FILE" "./dist/time_series_analysis-0.1.4-py3-none-any.whl"
-        fi
+        WHL_NAME=$(basename $WHL_FILE)  # 파일 이름만 추출
+        echo "WHL_FILE=$WHL_FILE" >> $GITHUB_ENV
+        echo "WHL_NAME=$WHL_NAME" >> $GITHUB_ENV
 
     - name: Create Release
       id: create_release
@@ -86,6 +81,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ env.WHL_NAME }}
-        asset_name: ${{ env.WHL_NAME }}
+        asset_path: ${{ env.WHL_FILE }}  # 경로 포함된 파일 경로
+        asset_name: ${{ env.WHL_NAME }}  # 파일 이름만
         asset_content_type: application/zip
