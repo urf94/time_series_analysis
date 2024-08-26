@@ -4,7 +4,9 @@ version = "0.1.4"
 description = "A time series analysis package"
 authors = ["urf94 <urf@mercuryproject.com>"]
 readme = "README.md"
-packages = [{ include = "changepoint_detection" }]  # 패키지 경로 설정
+packages = [
+    { include = "changepoint_detection", from = "." }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<=3.12"
