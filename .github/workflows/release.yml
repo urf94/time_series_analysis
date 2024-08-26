@@ -21,31 +21,11 @@ jobs:
     - name: Install Poetry
       run: pip install poetry
 
-    - name: Get version from pyproject.toml
-      id: get_version
+    - name: Configure build environment
       run: |
-        VERSION=$(poetry version -s)
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-    - name: Check if tag exists remotely
-      id: check_tag_exists
-      run: |
-        if git ls-remote --tags origin | grep "refs/tags/v${{ env.VERSION }}" >/dev/null 2>&1; then
-          echo "TAG_EXISTS=true" >> $GITHUB_ENV
-        else
-          echo "TAG_EXISTS=false" >> $GITHUB_ENV
-        fi
-      shell: bash
-
-    - name: Create Git tag
-      if: env.TAG_EXISTS == 'false'
-      env:
-        PAT_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
-      run: |
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
-        git tag v${{ env.VERSION }}
-        git push https://${{ secrets.URF_PAT }}@github.com/urf94/time_series_analysis.git v${{ env.VERSION }}
+        export POETRY_VIRTUALENVS_CREATE=false
+        export POETRY_HOME=$(pwd)/.poetry
+        export PATH="$POETRY_HOME/bin:$PATH"
 
     - name: Install dependencies
       run: poetry install --no-dev
@@ -56,13 +36,10 @@ jobs:
     - name: List build artifacts
       run: ls -al ./dist
 
-    - name: Get WHL file name
-      id: get_whl_name
-      run: echo "WHL_NAME=$(ls ./dist/*.whl)" >> $GITHUB_ENV
-
     - name: Rename WHL file
       run: |
         WHL_FILE=$(ls ./dist/*.whl)
+        echo "Found WHL file: $WHL_FILE"
         if [[ "$WHL_FILE" == *default.dist* ]]; then
           mv "$WHL_FILE" "./dist/time_series_analysis-0.1.4-py3-none-any.whl"
         fi
@@ -71,19 +48,17 @@ jobs:
       id: create_release
       uses: actions/create-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
+        GITHUB_TOKEN: ${{ secrets.URF_PAT }}  # Personal Access Token 사용
       with:
-        tag_name: v${{ env.VERSION }}
-        release_name: v${{ env.VERSION }}
+        tag_name: v0.1.4
+        release_name: v0.1.4
         draft: false
         prerelease: false
 
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ env.WHL_NAME }}
-        asset_name: ${{ env.WHL_NAME }}
+        asset_path: ./dist/time_series_analysis-0.1.4-py3-none-any.whl
+        asset_name: time_series_analysis-0.1.4-py3-none-any.whl
         asset_content_type: application/zip
