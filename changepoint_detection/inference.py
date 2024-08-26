@@ -13,10 +13,11 @@ def inference_prophet(df, scale, checkpoint_dir=None):
     # 모델 로드
     model = load_model(model_path)
 
-    # 추론 (changepoint 확인)
-    changepoints = model.predict(df[["ds"]])["changepoint"]
+    # 모델에서 감지된 changepoints 추출
+    changepoints = model.changepoints
 
-    return changepoints.dropna().tolist()
+    return changepoints.tolist()
+
 
 
 def inference_neuralprophet(df, checkpoint_dir=None):
@@ -30,7 +31,11 @@ def inference_neuralprophet(df, checkpoint_dir=None):
     # 모델 로드
     model = load_model(model_path)
 
-    # 추론 (changepoint 확인)
-    changepoints = model.model.find_changepoints(df["y"].values)
+    # 추론 수행
+    forecast = model.predict(df)
 
-    return changepoints.tolist()
+    # changepoints 직접 추출 (필요한 경우 로직 추가)
+    changepoints = forecast.loc[forecast['trend_change'] != 0, 'ds'].tolist()
+
+    return changepoints
+
