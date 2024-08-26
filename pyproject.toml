@@ -7,6 +7,10 @@ readme = "README.md"
 packages = [
     { include = "changepoint_detection", from = "." }
 ]
+include = [
+    { path = "checkpoint", format = "sdist" },
+    { path = "dist/*.whl", format = ["wheel"] }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<=3.12"
@@ -16,15 +20,3 @@ neuralprophet = "^0.9.0"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-# Include the checkpoint folder in the build
-[tool.poetry.include]
-include = [
-    "checkpoint/**"  # Include all files in the checkpoint folder
-]
-
-[tool.poetry.exclude]
-exclude = [
-    "*.pyc",
-    "__pycache__"
-]
