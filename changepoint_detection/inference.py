@@ -1,10 +1,12 @@
 import os
-import pickle
 from .utils import load_model
-import pandas as pd
 
 
-def inference_prophet(df, scale, checkpoint_dir="checkpoint"):
+def inference_prophet(df, scale, checkpoint_dir=None):
+    # 패키지 내 checkpoint 폴더를 기본값으로 설정
+    if checkpoint_dir is None:
+        checkpoint_dir = os.path.join(os.path.dirname(__file__), "checkpoint")
+
     model_filename = f"prophet_scale_{scale}.pkl"
     model_path = os.path.join(checkpoint_dir, model_filename)
 
@@ -12,25 +14,23 @@ def inference_prophet(df, scale, checkpoint_dir="checkpoint"):
     model = load_model(model_path)
 
     # 추론 (changepoint 확인)
-    changepoints = model.changepoints
+    changepoints = model.predict(df[["ds"]])["changepoint"]
 
-    return changepoints.tolist()
+    return changepoints.dropna().tolist()
 
 
-def inference_neuralprophet(df, checkpoint_dir="checkpoint"):
+def inference_neuralprophet(df, checkpoint_dir=None):
+    # 패키지 내 checkpoint 폴더를 기본값으로 설정
+    if checkpoint_dir is None:
+        checkpoint_dir = os.path.join(os.path.dirname(__file__), "checkpoint")
+
     model_filename = "neuralprophet.pkl"
     model_path = os.path.join(checkpoint_dir, model_filename)
 
     # 모델 로드
     model = load_model(model_path)
 
-    # NeuralProphet의 예측 수행
-    forecast = model.predict(df)
+    # 추론 (changepoint 확인)
+    changepoints = model.model.find_changepoints(df["y"].values)
 
-    # Changepoint를 추출하는 방식으로 트렌드의 변화를 확인
-    if "trend_change" in forecast.columns:
-        changepoints = forecast.loc[forecast["trend_change"].notnull(), "ds"].tolist()
-    else:
-        changepoints = []
-
-    return changepoints
+    return changepoints.tolist()
