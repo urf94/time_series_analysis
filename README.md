@@ -8,7 +8,7 @@
 ### 설치
 
 ```commandline
-pip install https://github.com/urf94/time_series_analysis/releases/download/v0.1.6/time_series_analysis-0.1.6-py3-none-any.whl
+pip install https://github.com/urf94/time_series_analysis/releases/download/v0.1.7/time_series_analysis-0.1.7-py3-none-any.whl
 ```
 
 
