@@ -42,8 +42,8 @@ class TestEnsembleFunction(unittest.TestCase):
             'ds': pd.date_range(start='2022-01-01', periods=5, freq='D'),
             'y': [1, 2, 3, 4, 5]
         })
-        with self.assertRaises(NoChangePointDetectedError, msg="NoChangePointDetectedError should be raised for short data."):
-            proba(short_df)
+        self.assertIsNone(proba(short_df))
+
 
     def test_proba_with_threshold(self):
         # 일정 threshold를 설정하고 proba 함수가 올바르게 작동하는지 확인

@@ -8,7 +8,11 @@
 ### 설치
 
 ```commandline
-pip install https://github.com/urf94/time_series_analysis/releases/download/v0.1.7/time_series_analysis-0.1.7-py3-none-any.whl
+
+pip install https://github.com/urf94/time_series_analysis/releases/download/v0.1.8/time_series_analysis-0.1.8-py3-none-any.whl
+
+pip install git+https://github.com/urf94/time_series_analysis.git@v0.1.8
+
 ```
 
 
@@ -58,13 +62,12 @@ print(result)   # {"n": 8, "k": -15.4}
 
 ```
 
-### PySpark UDF
-위와 같은 동작을 PySpark UDF를 통해 수행할 수 있습니다. 
+### PySpark
+위와 같은 동작을 Pandas DataFrame으로 변환 없이 PySpark에서 수행할 수 있습니다.
 
 
 ```python
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import udf
 from pyspark.sql.types import MapType, IntegerType, FloatType
 import pandas as pd
 from changepoint_detection import proba, NoChangePointDetectedError
@@ -92,14 +95,11 @@ def detect_changepoints(dates, values):
 
         # proba 함수를 사용한 changepoint 감지
         result = proba(pandas_df, norm_method="z-score", th=2)
-
-        # 결과를 반환
-        return result["n"], result["k"]
-    except NoChangePointDetectedError:
-        return None, None
-
-# UDF 등록
-changepoint_udf = udf(detect_changepoints, MapType(IntegerType(), FloatType()))
+        
+        if result:
+            return result["n"], result["k"]
+        else:
+            return None, None
 
 # UDF를 사용하여 데이터프레임에 changepoints 추가
 result_df = df.groupBy().applyInPandas(lambda pdf: pd.DataFrame({
@@ -114,4 +114,4 @@ result_df.show(truncate=False)
 
 주요 변경 사항
 - `inference_prophet`와 `inference_neuralprophet` 대신 `proba` 함수 사용
-- 예외 처리 추가. changepoint 감지에 실패한 경우 대응
+- ~~예외 처리 추가. changepoint 감지에 실패한 경우 대응~~
