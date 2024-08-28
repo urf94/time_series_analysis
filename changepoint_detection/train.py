@@ -1,5 +1,4 @@
 import os
-import pickle
 from prophet import Prophet
 from neuralprophet import NeuralProphet
 from .utils import load_model, save_model
