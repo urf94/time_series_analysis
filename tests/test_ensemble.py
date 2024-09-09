@@ -1,5 +1,6 @@
 import unittest
 import pandas as pd
+import datetime
 from changepoint_detection import voting, proba, NoChangePointDetectedError
 
 class TestEnsembleFunction(unittest.TestCase):
@@ -21,6 +22,7 @@ class TestEnsembleFunction(unittest.TestCase):
         self.assertIsInstance(result, dict, "The output of proba should be a dictionary.")
         self.assertIn("n", result, "The output dictionary should contain the key 'n'.")
         self.assertIn("k", result, "The output dictionary should contain the key 'k'.")
+        self.assertIn("datetime", result, "The output dictionary should contain the key 'datetime'.")
 
     def test_proba_not_empty(self):
         # proba 함수 호출 및 반환 값이 None이 아닌지 확인
@@ -35,6 +37,7 @@ class TestEnsembleFunction(unittest.TestCase):
         self.assertIn("k", result, "The output dictionary should contain the key 'k'.")
         self.assertIsInstance(result["n"], int, "The value of 'n' should be an integer.")
         self.assertIsInstance(result["k"], float, "The value of 'k' should be a float.")
+        self.assertIsInstance(result["datetime"], datetime.date, "The value of 'datetime' should be a datime.date.")
 
     def test_proba_with_invalid_data(self):
         # 너무 짧은 데이터에 대해 NoChangePointDetectedError가 발생하는지 확인
@@ -52,6 +55,7 @@ class TestEnsembleFunction(unittest.TestCase):
         self.assertGreaterEqual(result["n"], 0, "The value of 'n' should be non-negative.")
         self.assertGreaterEqual(result["k"], -100.0, "The value of 'k' should be greater than or equal to -100.")
         self.assertLessEqual(result["k"], 100.0, "The value of 'k' should be less than or equal to 100.")
+        self.assertLessEqual(result["datetime"], datetime.date.today(), "The value of 'datetime' should be less than or equal to today.")
 
 if __name__ == '__main__':
     unittest.main()
