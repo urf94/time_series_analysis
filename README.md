@@ -58,7 +58,7 @@ pandas_df = pandas_df.rename(columns={"datetime": "ds", "A": "y"})
 result = proba(pandas_df) # Defaut: norm_method="z-score" / th=2
 
 # 분석 결과 출력
-print(result)   # {"n": 8, "k": -15.4}
+print(result)   # {"n": 8, "k": -15.4, "datetime": datetime.date(2022, 4, 10)}
 
 ```
 
@@ -68,9 +68,8 @@ print(result)   # {"n": 8, "k": -15.4}
 
 ```python
 from pyspark.sql import SparkSession
-from pyspark.sql.types import MapType, IntegerType, FloatType
 import pandas as pd
-from changepoint_detection import proba, NoChangePointDetectedError
+from changepoint_detection import proba
 
 # Spark 세션 초기화
 spark = SparkSession.builder.appName("TimeSeriesAnalysis").getOrCreate()
@@ -97,15 +96,15 @@ def detect_changepoints(dates, values):
         result = proba(pandas_df, norm_method="z-score", th=2)
         
         if result:
-            return result["n"], result["k"]
+            return result["n"], result["k"], result["datetime"]
         else:
-            return None, None
+            return None, None, None
 
 # UDF를 사용하여 데이터프레임에 changepoints 추가
 result_df = df.groupBy().applyInPandas(lambda pdf: pd.DataFrame({
     'datetime': pdf['datetime'],
     'changepoints': [detect_changepoints(pdf['datetime'].tolist(), pdf['A'].tolist())]
-}), schema='datetime string, changepoints map<int, float>')
+}), schema='datetime string, changepoints map<int, float, datetime.date>')
 
 # 결과 출력
 result_df.show(truncate=False)

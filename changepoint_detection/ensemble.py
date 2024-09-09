@@ -116,4 +116,4 @@ def proba(df, norm_method: str = "z-score", th: float = 2) -> Union[None, dict]:
         return None
 
     # 결과 반환
-    return {"n": n, "k": round(k, 2)}
+    return {"n": n, "k": round(k, 2), 'datetime': last_datetime.date()}
