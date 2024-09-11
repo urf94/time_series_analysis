@@ -35,8 +35,9 @@ subpackage `changepoint_detection` 내의 proba 함수를 통해 chagepoint를 �
 
 ```python
 from pyspark.sql import SparkSession
+import datetime
 import pandas as pd
-from changepoint_detection import proba
+from changepoint_detection import proba, proba_w_post
 
 # Spark 세션 초기화
 spark = SparkSession.builder.appName("TimeSeriesAnalysis").getOrCreate()
@@ -55,7 +56,11 @@ pandas_df = df.select("datetime", "A").toPandas()
 pandas_df = pandas_df.rename(columns={"datetime": "ds", "A": "y"})
 
 # proba 함수 호출
-result = proba(pandas_df) # Defaut: norm_method="z-score" / th=2
+result = proba(pandas_df) # Default: norm_method="z-score" / th=2
+
+# 후처리: 이전 changepoint와 같은 경우 None 
+pre_changepoint = datetime.date.today()
+result = proba_w_post(pandas_df, pre_changepoint) # Default: norm_method="z-score" / th=2
 
 # 분석 결과 출력
 print(result)   # {"n": 8, "k": -15.4, "datetime": datetime.date(2022, 4, 10)}
