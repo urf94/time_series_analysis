@@ -1,7 +1,7 @@
 # __init__.py
 from .train import train_prophet, train_neuralprophet
 from .inference import inference_prophet, inference_neuralprophet
-from .ensemble import voting, proba, NoChangePointDetectedError
+from .ensemble import voting, proba, NoChangePointDetectedError, proba_w_post
 
 
 import logging

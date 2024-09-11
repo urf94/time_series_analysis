@@ -123,4 +123,4 @@ def proba(df, norm_method: str = "z-score", th: float = 2) -> Union[None, dict]:
 def proba_w_post(df, norm_method: str = "z-score", th: float = 2, **kwargs):
     pre_datetime = kwargs.pop('pre_changepoint')
     inference = proba(df, norm_method, th)
-    return None if inference == pre_datetime else inference
+    return None if inference['datetime'] == pre_datetime else inference

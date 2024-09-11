@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 import datetime
-from changepoint_detection import voting, proba, NoChangePointDetectedError
+from changepoint_detection import voting, proba, proba_w_post
 
 class TestEnsembleFunction(unittest.TestCase):
 
@@ -56,6 +56,10 @@ class TestEnsembleFunction(unittest.TestCase):
         self.assertGreaterEqual(result["k"], -100.0, "The value of 'k' should be greater than or equal to -100.")
         self.assertLessEqual(result["k"], 100.0, "The value of 'k' should be less than or equal to 100.")
         self.assertLessEqual(result["datetime"], datetime.date.today(), "The value of 'datetime' should be less than or equal to today.")
+
+        pre_changepoint = datetime.date(2022, 2, 25)
+        result2 = proba_w_post(self.df, th=1.5, pre_changepoint=pre_changepoint)
+        self.assertIsNone(result2)
 
 if __name__ == '__main__':
     unittest.main()
