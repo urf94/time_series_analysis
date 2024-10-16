@@ -125,6 +125,25 @@ def proba(df, norm_method: str = "z-score", th: float = 2) -> Union[None, dict]:
     return {"n": n, "k": round(k, 2), "datetime": max_changepoint.date()}
 
 
+def compute_slope(trend_series):
+    """
+    추세 시리즈의 기울기를 (max - min) / (len(df) - 1) 방식으로 계산합니다.
+
+    Parameters:
+    - trend_series: 추세 시리즈 (pd.Series)
+
+    Returns:
+    - 기울기 값
+    """
+    max_val = trend_series.max()
+    min_val = trend_series.min()
+    length = len(trend_series)
+    if length <= 1:
+        return 0
+    slope = (max_val - min_val) / (length - 1)
+    return slope
+
+
 def change_point_with_proba(
     df: pd.DataFrame,
     scales: Optional[list] = None,
@@ -144,7 +163,15 @@ def change_point_with_proba(
     - random_seed: 랜덤 시드
 
     Returns:
-    - 변화점 정보가 담긴 딕셔너리 또는 None
+    - dict: 변화점 정보가 담긴 딕셔너리
+        {
+            "n": int,          # 변화점과 마지막 날짜 간의 일수 차이
+            "k1": float,       # 변화점 이전 추세의 기울기
+            "k2": float,       # 변화점 이후 추세의 기울기
+            "delta": float,    # 추세 기울기의 변화율 (k2 - k1) * 100
+            "p": float         # 변화점의 확률
+        }
+        또는 None
     """
     np.random.seed(random_seed)
 
@@ -237,12 +264,13 @@ def change_point_with_proba(
     pre_trend = df_trend.iloc[:i_changepoint]["trend"].tolist()
     post_trend = df_trend.iloc[i_changepoint:]["trend"].tolist()
 
-    # 기울기 계산
+    # 기울기 계산 (max - min) / (len(df) - 1)
     if len(pre_trend) < 2 or len(post_trend) < 2:
         return None
-    k1 = (pre_trend[-1] - pre_trend[0]) / len(pre_trend)
-    k2 = (post_trend[-1] - post_trend[0]) / len(post_trend)
+    k1 = (pre_trend[-1] - pre_trend[0]) / (len(pre_trend) - 1)
+    k2 = (post_trend[-1] - post_trend[0]) / (len(post_trend) - 1)
 
+    # delta 계산: 추세 기울기의 변화율
     delta = round(100 * (k2 - k1), 2) if k1 * k2 > 0 else None
 
     # 결과 반환
