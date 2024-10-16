@@ -47,7 +47,9 @@ def voting(df: pd.DataFrame):
     return most_common_changepoint
 
 
-def proba(df, norm_method: str = "z-score", th: float = 2) -> Union[None, dict]:
+def proba_depreceted(
+    df, norm_method: str = "z-score", th: float = 2
+) -> Union[None, dict]:
     warnings.warn("'proba' function will be deprecated in future", DeprecationWarning)
 
     # changepoint_prior_scale 값들을 정의
@@ -125,25 +127,6 @@ def proba(df, norm_method: str = "z-score", th: float = 2) -> Union[None, dict]:
     return {"n": n, "k": round(k, 2), "datetime": max_changepoint.date()}
 
 
-def compute_slope(trend_series):
-    """
-    추세 시리즈의 기울기를 (max - min) / (len(df) - 1) 방식으로 계산합니다.
-
-    Parameters:
-    - trend_series: 추세 시리즈 (pd.Series)
-
-    Returns:
-    - 기울기 값
-    """
-    max_val = trend_series.max()
-    min_val = trend_series.min()
-    length = len(trend_series)
-    if length <= 1:
-        return 0
-    slope = (max_val - min_val) / (length - 1)
-    return slope
-
-
 def change_point_with_proba(
     df: pd.DataFrame,
     scales: Optional[list] = None,
@@ -159,12 +142,12 @@ def change_point_with_proba(
     - scales: changepoint_prior_scale 값들의 리스트
     - norm_method: 정규화 방법 ('z-score' 또는 'softmax')
     - th: 변화점 확률 임계값 (기본값: 2)
-    - random_seed: 랜덤 시드
 
     Returns:
     - dict: 변화점 정보가 담긴 딕셔너리
         {
             "n": int,          # 변화점과 마지막 날짜 간의 일수 차이
+            "datetime",        # 변화점 날짜
             "k1": float,       # 변화점 이전 추세의 기울기
             "k2": float,       # 변화점 이후 추세의 기울기
             "delta": float,    # 추세 기울기의 변화율 (k2 - k1) * 100
@@ -277,6 +260,7 @@ def change_point_with_proba(
         "k1": round(k1, 2),
         "k2": round(k2, 2),
         "delta": delta,
+        "datetime": highest_proba_changepoint.date(),
         "p": round(highest_proba, 2),
     }
 
