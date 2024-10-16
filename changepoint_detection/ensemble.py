@@ -134,6 +134,7 @@ def change_point_with_proba(
 ) -> Union[None, dict]:
     """
     시계열 데이터에서 변화점을 추출하고 각 변화점의 확률을 계산합니다.
+    가장 높은 확률의 변화점만을 반영한 트렌드의 기울기를 계산합니다.
 
     Parameters:
     - df: 시계열 데이터프레임 (ds, y 컬럼 포함)
@@ -180,9 +181,10 @@ def change_point_with_proba(
         else:
             raise NotImplementedError("Unsupported normalization method.")
 
+        # 임계값 필터링
         proba = np.where(proba < th, 0, proba)
 
-        # changepoints와 proba를 datetime_proba에 누적
+        # changepoints와 proba를 pseudo_cps에 누적
         for i, changepoint in enumerate(changepoints):
             if changepoint in pseudo_cps:
                 pseudo_cps[changepoint] += proba[i] / n_scales
@@ -202,7 +204,12 @@ def change_point_with_proba(
     highest_proba_changepoint = max(pseudo_cps, key=pseudo_cps.get)
     highest_proba = pseudo_cps[highest_proba_changepoint]
 
-    i_changepoint = df["ds"].tolist().index(highest_proba_changepoint)
+    # Find the index of the changepoint
+    try:
+        i_changepoint = df["ds"].tolist().index(highest_proba_changepoint)
+    except ValueError:
+        # Change point not found in 'ds' column
+        return None
 
     # N: timestamp interval (changepoint ~ last)
     last_datetime = df["ds"].max()
@@ -210,36 +217,41 @@ def change_point_with_proba(
     if (n_days < len(df) * 0.1) or (n_days > len(df) * 0.9):
         return None
 
-    # changepoint 이전, 이후 trend
-    pre_changepoint_trend = avg_trend.iloc[i_changepoint - 1 : i_changepoint]
-    post_changepoint_trend = avg_trend.iloc[i_changepoint + 1 :]
+    # Prophet 모델을 재구성하여 선택된 changepoint만 포함
+    model_single_cp = Prophet(
+        changepoint_prior_scale=0.05,  # 필요에 따라 조정
+        changepoint_range=1.0,
+        daily_seasonality=False,
+        yearly_seasonality=False,
+        changepoints=[highest_proba_changepoint],
+    )
+    model_single_cp.fit(df)
+    future_single_cp = model_single_cp.make_future_dataframe(periods=0)
+    forecast_single_cp = model_single_cp.predict(future_single_cp)
+    trend_single_cp = forecast_single_cp["trend"]
 
-    # trend 값의 최소 및 최대 계산
-    max_trend_after = post_changepoint_trend.max()  # 이후 데이터의 최대 trend 값
-    min_trend_after = post_changepoint_trend.min()  # 이후 데이터의 최소 trend 값
+    # 추세 시리즈를 DataFrame에 추가
+    df_trend = pd.DataFrame({"ds": df["ds"], "trend": trend_single_cp})
 
-    # trend 값 at changepoint
-    changepoint_trend = avg_trend.iloc[i_changepoint]
+    # 변화점 전후의 트렌드 추출
+    pre_trend = df_trend.iloc[:i_changepoint]["trend"].tolist()
+    post_trend = df_trend.iloc[i_changepoint:]["trend"].tolist()
 
-    # K: delta trend 계산
-    if max_trend_after - changepoint_trend >= changepoint_trend - min_trend_after:
-        k = (max_trend_after - changepoint_trend) / changepoint_trend * 100
-    else:
-        k = (min_trend_after - changepoint_trend) / changepoint_trend * 100
-
-    # N: timestamp interval (changepoint ~ last)
-    last_datetime = df["ds"].max()
-    n_days = (last_datetime - highest_proba_changepoint).days
-
-    if n_days < len(df) * 0.1:
+    # 기울기 계산
+    if len(pre_trend) < 2 or len(post_trend) < 2:
         return None
+    k1 = (pre_trend[-1] - pre_trend[0]) / len(pre_trend)
+    k2 = (post_trend[-1] - post_trend[0]) / len(post_trend)
+
+    delta = round(100 * (k2 - k1), 2) if k1 * k2 > 0 else None
 
     # 결과 반환
     return {
         "n": n_days,
-        "k": round(k, 2),
-        "datetime": highest_proba_changepoint.date(),
-        "proba": round(highest_proba, 4),
+        "k1": round(k1, 2),
+        "k2": round(k2, 2),
+        "delta": delta,
+        "p": round(highest_proba, 2),
     }
 
 
