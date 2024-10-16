@@ -108,6 +108,12 @@ class TestEnsembleFunction(unittest.TestCase):
         )
         self.assertIn("n", result, "The output dictionary should contain the key 'n'.")
         self.assertIn(
+            "datetime",
+            result,
+            "The output dictionary should contain the key 'datetime'.",
+        )
+
+        self.assertIn(
             "k1", result, "The output dictionary should contain the key 'k1'."
         )
         self.assertIn(
@@ -137,6 +143,12 @@ class TestEnsembleFunction(unittest.TestCase):
             self.assertIn(
                 "n", result, "The output dictionary should contain the key 'n'."
             )
+            self.assertIn(
+                "datetime",
+                result,
+                "The output dictionary should contain the key 'datetime'.",
+            )
+
             self.assertIn(
                 "k1", result, "The output dictionary should contain the key 'k1'."
             )
