@@ -3,7 +3,7 @@ from .train import train_prophet, train_neuralprophet
 from .inference import inference_prophet, inference_neuralprophet
 from .ensemble import (
     voting,
-    proba,
+    proba_depreceted as proba,
     NoChangePointDetectedError,
     proba_w_post,
     change_point_with_proba,
