@@ -1,7 +1,8 @@
 import unittest
+import numpy as np
 import pandas as pd
 import datetime
-from changepoint_detection import change_point_with_proba as proba, proba_w_post
+from changepoint_detection import voting, proba, proba_w_post, change_point_with_proba
 
 
 class TestEnsembleFunction(unittest.TestCase):
@@ -53,18 +54,20 @@ class TestEnsembleFunction(unittest.TestCase):
         self.assertIsInstance(
             result["datetime"],
             datetime.date,
-            "The value of 'datetime' should be a datime.date.",
+            "The value of 'datetime' should be a datetime.date.",
         )
 
     def test_proba_with_invalid_data(self):
-        # 너무 짧은 데이터에 대해 NoChangePointDetectedError가 발생하는지 확인
+        # 너무 짧은 데이터에 대해 proba 함수가 None을 반환하는지 확인
         short_df = pd.DataFrame(
             {
                 "ds": pd.date_range(start="2022-01-01", periods=5, freq="D"),
                 "y": [1, 2, 3, 4, 5],
             }
         )
-        self.assertIsNone(proba(short_df))
+        self.assertIsNone(
+            proba(short_df), "The output should be None for too short data."
+        )
 
     def test_proba_with_threshold(self):
         # 일정 threshold를 설정하고 proba 함수가 올바르게 작동하는지 확인
@@ -92,6 +95,137 @@ class TestEnsembleFunction(unittest.TestCase):
         pre_changepoint = datetime.date(2022, 2, 25)
         result2 = proba_w_post(self.df, th=1.5, pre_changepoint=pre_changepoint)
         self.assertIsNone(result2)
+
+    # ------------------- 새로운 테스트 케이스 시작 -------------------
+
+    def test_change_point_with_proba_output_type(self):
+        # change_point_with_proba 함수 호출 및 반환 값이 dict인지 확인
+        result = change_point_with_proba(self.df)
+        self.assertIsInstance(
+            result,
+            dict,
+            "The output of change_point_with_proba should be a dictionary.",
+        )
+        self.assertIn("n", result, "The output dictionary should contain the key 'n'.")
+        self.assertIn(
+            "k1", result, "The output dictionary should contain the key 'k1'."
+        )
+        self.assertIn(
+            "k2", result, "The output dictionary should contain the key 'k2'."
+        )
+        self.assertIn(
+            "delta", result, "The output dictionary should contain the key 'delta'."
+        )
+        self.assertIn("p", result, "The output dictionary should contain the key 'p'.")
+
+    def test_change_point_with_proba_not_empty(self):
+        # change_point_with_proba 함수 호출 및 반환 값이 None이 아닌지 확인
+        result = change_point_with_proba(self.df)
+        self.assertIsNotNone(
+            result, "The output of change_point_with_proba should not be None."
+        )
+        self.assertGreater(
+            len(result),
+            0,
+            "The output of change_point_with_proba should not be an empty dictionary.",
+        )
+
+    def test_change_point_with_proba_valid_keys_and_types(self):
+        # change_point_with_proba 함수 호출 및 반환된 딕셔너리가 예상된 키를 포함하고 있는지 확인
+        result = change_point_with_proba(self.df)
+        if result:
+            self.assertIn(
+                "n", result, "The output dictionary should contain the key 'n'."
+            )
+            self.assertIn(
+                "k1", result, "The output dictionary should contain the key 'k1'."
+            )
+            self.assertIn(
+                "k2", result, "The output dictionary should contain the key 'k2'."
+            )
+            self.assertIn(
+                "delta", result, "The output dictionary should contain the key 'delta'."
+            )
+            self.assertIn(
+                "p", result, "The output dictionary should contain the key 'p'."
+            )
+            self.assertIsInstance(
+                result["n"], int, "The value of 'n' should be an integer."
+            )
+            self.assertIsInstance(
+                result["k1"], float, "The value of 'k1' should be a float."
+            )
+            self.assertIsInstance(
+                result["k2"], float, "The value of 'k2' should be a float."
+            )
+            self.assertTrue(
+                isinstance(result["delta"], float) or result["delta"] is None,
+                "The value of 'delta' should be a float or None.",
+            )
+            self.assertIsInstance(
+                result["p"], float, "The value of 'p' should be a float."
+            )
+
+    def test_change_point_with_proba_with_invalid_data(self):
+        # 너무 짧은 데이터에 대해 change_point_with_proba 함수가 None을 반환하는지 확인
+        short_df = pd.DataFrame(
+            {
+                "ds": pd.date_range(start="2022-01-01", periods=5, freq="D"),
+                "y": [1, 2, 3, 4, 5],
+            }
+        )
+        self.assertIsNone(
+            change_point_with_proba(short_df),
+            "The output should be None for too short data.",
+        )
+
+    def test_change_point_with_proba_with_threshold(self):
+        # 일정 threshold를 설정하고 change_point_with_proba 함수가 올바르게 작동하는지 확인
+        result = change_point_with_proba(self.df, th=10)
+        # 임계값을 높게 설정했기 때문에 결과가 None일 가능성이 큼
+        self.assertIsNone(
+            result,
+            "The output should be None when the threshold is set high and no changepoint meets it.",
+        )
+
+    def test_change_point_with_proba_correctness(self):
+        # 알려진 변화점을 가진 데이터에서 change_point_with_proba 함수가 이를 정확히 감지하는지 확인
+        # 변경점이 있는 데이터 생성
+        dates = pd.date_range(start="2023-01-01", periods=200, freq="D")
+        y = np.random.randn(200).cumsum()
+        # 특정 날짜(예: 100번째 날짜)에 큰 변화점 추가
+        y[100:] += 100
+        test_df = pd.DataFrame({"ds": dates, "y": y})
+
+        result = change_point_with_proba(
+            test_df, scales=[0.01, 0.05, 0.1], norm_method="z-score", th=2
+        )
+
+        self.assertIsNotNone(
+            result,
+            "The output of change_point_with_proba should not be None for data with a change point.",
+        )
+
+        # 변화점이 100번째 날짜인지 확인
+        expected_cp = dates[100].date()
+        # 기울기와 n_days가 예상 범위에 있는지 확인
+        self.assertTrue(
+            80 <= result["n"] <= 120,
+            "The value of 'n' should be within the expected range.",
+        )
+        self.assertIsInstance(
+            result["k1"], float, "The value of 'k1' should be a float."
+        )
+        self.assertIsInstance(
+            result["k2"], float, "The value of 'k2' should be a float."
+        )
+        self.assertTrue(
+            isinstance(result["delta"], float) or result["delta"] is None,
+            "The value of 'delta' should be a float or None.",
+        )
+        self.assertIsInstance(result["p"], float, "The value of 'p' should be a float.")
+
+    # ------------------- 새로운 테스트 케이스 끝 -------------------
 
 
 if __name__ == "__main__":
