@@ -149,7 +149,6 @@ def change_point_with_proba(
     scales: Optional[list] = None,
     norm_method: str = "z-score",
     th: float = 2,
-    random_seed: int = 9999,
 ) -> Union[None, dict]:
     """
     시계열 데이터에서 변화점을 추출하고 각 변화점의 확률을 계산합니다.
@@ -173,7 +172,6 @@ def change_point_with_proba(
         }
         또는 None
     """
-    np.random.seed(random_seed)
 
     if scales is None:
         scales = [0.005 * (5 * i) for i in range(1, 9)]  # 0.005, 0.025, 0.05, ..., 0.2
@@ -286,7 +284,7 @@ def change_point_with_proba(
 def proba_w_post(
     df,
     scales=None,
-    method="auto",
+    method="past",
     norm_method: str = "z-score",
     th: float = 2,
     **kwargs,
