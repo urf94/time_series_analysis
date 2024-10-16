@@ -192,9 +192,9 @@ class TestEnsembleFunction(unittest.TestCase):
         # 알려진 변화점을 가진 데이터에서 change_point_with_proba 함수가 이를 정확히 감지하는지 확인
         # 변경점이 있는 데이터 생성
         dates = pd.date_range(start="2023-01-01", periods=200, freq="D")
-        y = np.random.randn(200).cumsum()
-        # 특정 날짜(예: 100번째 날짜)에 큰 변화점 추가
-        y[100:] += 100
+        y = np.concatenate(
+            [np.arange(100) * 1, np.arange(100) * 3 + 100]
+        )  # 기울기 1에서 3으로 증가
         test_df = pd.DataFrame({"ds": dates, "y": y})
 
         result = change_point_with_proba(
@@ -205,27 +205,57 @@ class TestEnsembleFunction(unittest.TestCase):
             result,
             "The output of change_point_with_proba should not be None for data with a change point.",
         )
-
-        # 변화점이 100번째 날짜인지 확인
+        # 변화점이 약 100번째 날짜인지 확인 (실제 Prophet 감지 위치는 다를 수 있음)
         expected_cp = dates[100].date()
+
         # 기울기와 n_days가 예상 범위에 있는지 확인
         self.assertTrue(
-            80 <= result["n"] <= 120,
-            "The value of 'n' should be within the expected range.",
+            90 <= result["n"] <= 110,
+            "The value of 'n' should be exactly 100 for this synthetic data.",
         )
-        self.assertIsInstance(
-            result["k1"], float, "The value of 'k1' should be a float."
+        self.assertAlmostEqual(
+            result["k1"],
+            1.0,
+            places=1,
+            msg="The value of 'k1' should be approximately 1.0.",
         )
-        self.assertIsInstance(
-            result["k2"], float, "The value of 'k2' should be a float."
+        self.assertAlmostEqual(
+            result["k2"],
+            3.0,
+            places=1,
+            msg="The value of 'k2' should be approximately 2.0.",
         )
-        self.assertTrue(
-            isinstance(result["delta"], float) or result["delta"] is None,
-            "The value of 'delta' should be a float or None.",
+        d = result["delta"]
+        self.assertGreaterEqual(
+            d, 190, "The 'delta' should be greater than 200 - alpha."
         )
+        self.assertLessEqual(d, 210, "The 'delta' should be less than 200 + alpha.")
         self.assertIsInstance(result["p"], float, "The value of 'p' should be a float.")
 
-    # ------------------- 새로운 테스트 케이스 끝 -------------------
+    def test_change_point_with_proba_delta_calculation_opposite_signs(self):
+        # 기울기가 변화점 이전에는 양수, 이후에는 음수인 데이터 생성
+        dates = pd.date_range(start="2023-01-01", periods=200, freq="D")
+        y_pre = np.arange(100) * 1  # 기울기 1
+        y_post = np.arange(100) * (-1) + 100  # 기울기 -1
+        y = np.concatenate([y_pre, y_post])
+        test_df = pd.DataFrame({"ds": dates, "y": y})
+
+        result = change_point_with_proba(
+            test_df, scales=[0.01, 0.05, 0.1], norm_method="z-score", th=2
+        )
+
+        self.assertIsNotNone(
+            result,
+            "The output of change_point_with_proba should not be None for data with a change point.",
+        )
+        self.assertIn(
+            "delta", result, "The output dictionary should contain the key 'delta'."
+        )
+        # delta는 양수에서 음수로 변화했으므로 None이어야 함
+        self.assertIsNone(
+            result["delta"],
+            "The value of 'delta' should be None when k1 and k2 have opposite signs.",
+        )
 
 
 if __name__ == "__main__":
