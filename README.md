@@ -10,9 +10,9 @@ Time Series Analysis 패키지는 시계열 데이터의 다양한 분석 기능
 
 ```commandline
 
-pip install https://github.com/urf94/time_series_analysis/releases/download/v0.2.1/time_series_analysis-0.2.1-py3-none-any.whl
+pip install https://github.com/urf94/time_series_analysis/releases/download/v0.2.3/time_series_analysis-0.2.3-py3-none-any.whl
 
-pip install git+https://github.com/urf94/time_series_analysis.git@v0.2.1
+pip install git+https://github.com/urf94/time_series_analysis.git@v0.2.3
 
 ```
 
