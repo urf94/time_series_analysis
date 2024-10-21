@@ -1,4 +1,5 @@
 import warnings
+import datetime
 from typing import Union, Optional
 import numpy as np
 import pandas as pd
@@ -132,6 +133,7 @@ def change_point_with_proba(
     scales: Optional[list] = None,
     norm_method: str = "z-score",
     th: float = 2,
+    debug: bool = False,
 ) -> Union[None, dict]:
     """
     시계열 데이터에서 변화점을 추출하고 각 변화점의 확률을 계산합니다.
@@ -191,6 +193,8 @@ def change_point_with_proba(
 
         # 임계값 필터링
         proba = np.where(proba < th, 0, proba)
+        if debug:
+            print(f"Filtered proba with scale {scale} : {proba}")
 
         # changepoints와 proba를 pseudo_cps에 누적
         for i, changepoint in enumerate(changepoints):
@@ -202,6 +206,8 @@ def change_point_with_proba(
     # 평균 trend 계산
     avg_trend = pd.concat(all_trends, axis=1).mean(axis=1)
     # changepoint thresholding
+    if debug:
+        print(f"Pseudo CPs : {pseudo_cps}")
     pseudo_cps = {cp: prob for cp, prob in pseudo_cps.items() if prob >= th}
 
     # 임계값 이상의 changepoint가 없는 경우 return None
@@ -214,20 +220,25 @@ def change_point_with_proba(
 
     # Find the index of the changepoint
     try:
-        i_changepoint = df["ds"].tolist().index(highest_proba_changepoint)
+        i_changepoint = df["ds"].tolist().index(str(highest_proba_changepoint.date()))
     except ValueError:
         # Change point not found in 'ds' column
+        if debug:
+            print(f"Cannot find CP in ds")
         return None
 
     # N: timestamp interval (changepoint ~ last)
     last_datetime = df["ds"].max()
-    n_days = (last_datetime - highest_proba_changepoint).days
+    last_datetime = [int(d) for d in last_datetime.split("-")]
+    n_days = (datetime.datetime(*last_datetime) - highest_proba_changepoint).days
     if (n_days < len(df) * 0.1) or (n_days > len(df) * 0.9):
+        if debug:
+            print(f"CP is too closed to end.")
         return None
 
     # Prophet 모델을 재구성하여 선택된 changepoint만 포함
     model_single_cp = Prophet(
-        changepoint_prior_scale=0.05,  # 필요에 따라 조정
+        changepoint_prior_scale=1,  # 필요에 따라 조정
         changepoint_range=1.0,
         daily_seasonality=False,
         yearly_seasonality=False,
@@ -244,9 +255,12 @@ def change_point_with_proba(
     # 변화점 전후의 트렌드 추출
     pre_trend = df_trend.iloc[:i_changepoint]["trend"].tolist()
     post_trend = df_trend.iloc[i_changepoint:]["trend"].tolist()
+    post_trend = [t for t in post_trend if not pd.isna(t)]
 
     # 기울기 계산 (max - min) / (len(df) - 1)
     if len(pre_trend) < 2 or len(post_trend) < 2:
+        if debug:
+            print(f"CP is too closed to end..")
         return None
     k1 = (pre_trend[-1] - pre_trend[0]) / (len(pre_trend) - 1)
     k2 = (post_trend[-1] - post_trend[0]) / (len(post_trend) - 1)
