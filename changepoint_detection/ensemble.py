@@ -133,6 +133,7 @@ def change_point_with_proba(
     scales: Optional[list] = None,
     norm_method: str = "z-score",
     th: float = 2,
+    sparsity: bool = False,
     debug: bool = False,
 ) -> Union[None, dict]:
     """
@@ -144,12 +145,13 @@ def change_point_with_proba(
     - scales: changepoint_prior_scale 값들의 리스트
     - norm_method: 정규화 방법 ('z-score' 또는 'softmax')
     - th: 변화점 확률 임계값 (기본값: 2)
+    - debug: 디버그 출력 여부 (기본값: False)
 
     Returns:
     - dict: 변화점 정보가 담긴 딕셔너리
         {
             "n": int,          # 변화점과 마지막 날짜 간의 일수 차이
-            "datetime",        # 변화점 날짜
+            "datetime": str,   # 변화점 날짜 (yyyy-mm-dd)
             "k1": float,       # 변화점 이전 추세의 기울기
             "k2": float,       # 변화점 이후 추세의 기울기
             "delta": float,    # 추세 기울기의 변화율 (k2 - k1) * 100
@@ -157,6 +159,28 @@ def change_point_with_proba(
         }
         또는 None
     """
+
+    # 입력 데이터프레임 복사 및 'ds' 컬럼 변환
+    df = df.copy()
+    try:
+        df["ds"] = pd.to_datetime(df["ds"]).dt.strftime("%Y-%m-%d")
+    except Exception as e:
+        raise ValueError(f"Error converting 'ds' column to 'yyyy-mm-dd' format: {e}")
+
+    try:
+        df["y"] = df["y"].fillna(0)
+    except Exception as e:
+        raise ValueError(f"Error occurs during fill NA value with 0: {e}")
+
+    if len(df["ds"].unique()) < 90:
+        if debug:
+            print(f"Input data needs more than 90 data points.")
+        return None
+
+    if empty_point := sum(df["y"] == 0) < 45 and sparsity:
+        if debug:
+            print(f"Input data is too sparse. {empty_point} points is empty.")
+        return None
 
     if scales is None:
         scales = [0.005 * (5 * i) for i in range(1, 9)]  # 0.005, 0.025, 0.05, ..., 0.2
@@ -179,7 +203,7 @@ def change_point_with_proba(
         forecast = model.predict(future)
         all_trends.append(forecast["trend"])
 
-        # 모델에서 잠재 changepoints 추출
+        # 모델에서 잠재 changepoints 추출 및 문자열로 변환
         changepoints = model.changepoints
 
         # changepoints의 Z-score 계산
@@ -198,6 +222,7 @@ def change_point_with_proba(
 
         # changepoints와 proba를 pseudo_cps에 누적
         for i, changepoint in enumerate(changepoints):
+            changepoint = str(changepoint.date())
             if changepoint in pseudo_cps:
                 pseudo_cps[changepoint] += proba[i] / n_scales
             else:
@@ -205,13 +230,19 @@ def change_point_with_proba(
 
     # 평균 trend 계산
     avg_trend = pd.concat(all_trends, axis=1).mean(axis=1)
+
     # changepoint thresholding
     if debug:
-        print(f"Pseudo CPs : {pseudo_cps}")
+        print(f"Pseudo CPs before thresholding: {pseudo_cps}")
     pseudo_cps = {cp: prob for cp, prob in pseudo_cps.items() if prob >= th}
+
+    if debug:
+        print(f"Pseudo CPs after thresholding: {pseudo_cps}")
 
     # 임계값 이상의 changepoint가 없는 경우 return None
     if not pseudo_cps:
+        if debug:
+            print("No changepoint meets the threshold.")
         return None
 
     # 확률 기준으로 가장 높은 확률을 가진 changepoint 선택
@@ -220,20 +251,28 @@ def change_point_with_proba(
 
     # Find the index of the changepoint
     try:
-        i_changepoint = df["ds"].tolist().index(str(highest_proba_changepoint.date()))
+        i_changepoint = df["ds"].tolist().index(highest_proba_changepoint)
     except ValueError:
         # Change point not found in 'ds' column
         if debug:
-            print(f"Cannot find CP in ds")
+            print(
+                f"Cannot find changepoint {highest_proba_changepoint} in 'ds' column."
+            )
         return None
 
     # N: timestamp interval (changepoint ~ last)
-    last_datetime = df["ds"].max()
-    last_datetime = [int(d) for d in last_datetime.split("-")]
-    n_days = (datetime.datetime(*last_datetime) - highest_proba_changepoint).days
+    last_datetime_str = df["ds"].max()
+    last_datetime = datetime.datetime.strptime(last_datetime_str, "%Y-%m-%d")
+    changepoint_datetime = datetime.datetime.strptime(
+        highest_proba_changepoint, "%Y-%m-%d"
+    )
+    n_days = (last_datetime - changepoint_datetime).days
+
     if (n_days < len(df) * 0.1) or (n_days > len(df) * 0.9):
         if debug:
-            print(f"CP is too closed to end.")
+            print(
+                f"Changepoint {highest_proba_changepoint} is too close to the end. n_days: {n_days}"
+            )
         return None
 
     # Prophet 모델을 재구성하여 선택된 changepoint만 포함
@@ -260,7 +299,7 @@ def change_point_with_proba(
     # 기울기 계산 (max - min) / (len(df) - 1)
     if len(pre_trend) < 2 or len(post_trend) < 2:
         if debug:
-            print(f"CP is too closed to end..")
+            print("Insufficient data points before or after changepoint.")
         return None
     k1 = (pre_trend[-1] - pre_trend[0]) / (len(pre_trend) - 1)
     k2 = (post_trend[-1] - post_trend[0]) / (len(post_trend) - 1)
@@ -271,10 +310,10 @@ def change_point_with_proba(
     # 결과 반환
     return {
         "n": n_days,
+        "datetime": highest_proba_changepoint,
         "k1": round(k1, 2),
         "k2": round(k2, 2),
         "delta": delta,
-        "datetime": highest_proba_changepoint.date(),
         "p": round(highest_proba, 2),
     }
 
