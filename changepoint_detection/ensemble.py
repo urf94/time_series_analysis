@@ -315,6 +315,7 @@ def change_point_with_proba(
         "k2": round(k2, 2),
         "delta": delta,
         "p": round(highest_proba, 2),
+        "trend": trend_single_cp,
     }
 
 
