@@ -305,7 +305,8 @@ def change_point_with_proba(
     k2 = (post_trend[-1] - post_trend[0]) / (len(post_trend) - 1)
 
     # delta 계산: 추세 기울기의 변화율
-    delta = round(100 * (k2 - k1), 2) if k1 * k2 > 0 else None
+    # delta = round(100 * (k2 - k1), 2) if k1 * k2 > 0 else None
+    delta = round(100 * k2 / k1, 2) if k1 * k2 > 0 else None
 
     # 결과 반환
     return {
@@ -315,7 +316,7 @@ def change_point_with_proba(
         "k2": round(k2, 2),
         "delta": delta,
         "p": round(highest_proba, 2),
-        "trend": trend_single_cp,
+        "trend": trend_single_cp.tolist(),
     }
 
 
