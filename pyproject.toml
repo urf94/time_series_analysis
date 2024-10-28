@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "time_series_analysis"
-version = "0.3.2"
+version = "0.3.3"
 description = "A time series analysis package"
 authors = ["urf94 <urf@mercuryproject.com>"]
 readme = "README.md"
