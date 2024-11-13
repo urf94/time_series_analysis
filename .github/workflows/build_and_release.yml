@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-#    runs-on: ubuntu-latest
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -22,6 +21,53 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+
+    - name: Install Poetry
+      run: pip install poetry
+
+    - name: Get version from pyproject.toml
+      id: get_version
+      run: |
+        VERSION=$(poetry version -s)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Check if tag exists remotely
+      id: check_tag_exists
+      run: |
+        if git ls-remote --tags origin | grep "refs/tags/v${{ env.VERSION }}" >/dev/null 2>&1; then
+          echo "TAG_EXISTS=true" >> $GITHUB_ENV
+        else
+          echo "TAG_EXISTS=false" >> $GITHUB_ENV
+        fi
+      shell: bash
+
+    - name: Create Git tag
+      if: env.TAG_EXISTS == 'false'
+      env:
+        PAT_TOKEN: ${{ secrets.URF_PAT }}  # URF_PAT 사용
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git tag v${{ env.VERSION }}
+        git push https://${{ secrets.URF_PAT }}@github.com/urf94/time_series_analysis.git v${{ env.VERSION }}
+
+    - name: Install dependencies
+      run: poetry install --no-dev
+
+    - name: Build package
+      run: poetry build
+
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.10"
 
     - name: Install Poetry
       run: pip install poetry
