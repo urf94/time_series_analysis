@@ -4,8 +4,9 @@ import numpy as np
 import datetime
 from changepoint_detection import proba, proba_w_post, change_point_with_proba
 
-from samples.taylormade import ds as tm_ds, y as tm_y
-from samples.women09 import ds as wm_ds, y as wm_y
+from test_samples.taylormade import ds as tm_ds, y as tm_y
+from test_samples.women09 import ds as wm_ds, y as wm_y
+
 
 class TestEnsembleFunctionDeprecated(unittest.TestCase):
 
