@@ -1,14 +1,6 @@
 # __init__.py
-from .train import train_prophet
-from .inference import inference_prophet
-from .ensemble import (
-    voting,
-    proba_depreceted as proba,
-    NoChangePointDetectedError,
-    proba_w_post,
-    change_point_with_proba,
-)
-
+from .train import train_neuralprophet
+from .inference import inference_neuralprophet
 
 import logging
 import warnings
