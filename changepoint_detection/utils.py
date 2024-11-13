@@ -4,6 +4,7 @@ import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
 
+
 def load_model(model_path, model_class=None, **kwargs):
     """Load model from the given path. If not found, create a new model instance."""
     if os.path.exists(model_path):
