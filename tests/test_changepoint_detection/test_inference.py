@@ -6,7 +6,7 @@ from changepoint_detection.inference import inference_prophet, inference_neuralp
 
 class TestInferenceFunctions(unittest.TestCase):
     def setUp(self):
-        self.checkpoint_dir = "../checkpoint"
+        self.checkpoint_dir = "../../checkpoint"
         self.df = pd.DataFrame(
             {
                 "ds": pd.date_range(start="2022-01-01", periods=10, freq="D"),
@@ -44,7 +44,7 @@ class TestInferenceFunctions(unittest.TestCase):
 
     def test_inference_neuralprophet(self):
         # 절대 경로로 설정
-        checkpoint_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "checkpoint"))
+        checkpoint_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..", "checkpoint"))
         print(f"Testing with checkpoint directory: {checkpoint_dir}")
         assert os.path.exists(checkpoint_dir), f"Checkpoint directory not found: {checkpoint_dir}"
 
