@@ -1,6 +1,6 @@
 # __init__.py
-from .train import train_prophet, train_neuralprophet
-from .inference import inference_prophet, inference_neuralprophet
+from .train import train_prophet
+from .inference import inference_prophet
 from .ensemble import (
     voting,
     proba_depreceted as proba,
