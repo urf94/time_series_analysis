@@ -71,7 +71,7 @@ jobs:
         git push https://${{ secrets.URF_PAT }}@github.com/urf94/time_series_analysis.git v${{ env.VERSION }}
 
     - name: Install dependencies
-      run: poetry install --no-dev
+      run: poetry install
 
     - name: Build package
       run: poetry build
