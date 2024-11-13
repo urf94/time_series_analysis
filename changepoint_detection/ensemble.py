@@ -177,7 +177,7 @@ def change_point_with_proba(
             print(f"Input data needs more than 90 data points.")
         return None
 
-    if empty_point := sum(df["y"] == 0) < 45 and sparsity:
+    if empty_point := sum(df["y"] == 0) > 45 and sparsity:
         if debug:
             print(f"Input data is too sparse. {empty_point} points is empty.")
         return None
