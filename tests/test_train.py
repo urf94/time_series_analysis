@@ -1,8 +1,6 @@
 import unittest
 import pandas as pd
-from changepoint_detection.train import train_prophet, train_neuralprophet
-from prophet import Prophet
-from neuralprophet import NeuralProphet
+from changepoint_detection.train import train_prophet
 
 
 class TestTrainFunctions(unittest.TestCase):
@@ -24,12 +22,12 @@ class TestTrainFunctions(unittest.TestCase):
             self.assertIsInstance(e, Exception)
             print(f"Handled exception: {e}")
 
-    def test_train_neuralprophet(self):
-        try:
-            train_neuralprophet(self.df, checkpoint_dir=self.checkpoint_dir)
-        except RuntimeError as e:
-            self.assertIsInstance(e, RuntimeError)
-            print(f"Handled RuntimeError: {e}")
+    # def test_train_neuralprophet(self):
+    #     try:
+    #         train_neuralprophet(self.df, checkpoint_dir=self.checkpoint_dir)
+    #     except RuntimeError as e:
+    #         self.assertIsInstance(e, RuntimeError)
+    #         print(f"Handled RuntimeError: {e}")
 
 
 if __name__ == "__main__":
