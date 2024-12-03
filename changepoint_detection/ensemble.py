@@ -1,5 +1,7 @@
 import warnings
 import datetime
+from datetime import datetime
+import calendar
 from collections import defaultdict
 from typing import Union, Optional, Sequence
 import numpy as np
@@ -134,17 +136,20 @@ class Ensembler:
                  cp_priors: Sequence = tuple(0.005 * (5 * i) for i in range(1, 9)),
                  cp_proba_norm: str = "z-score",
                  cp_threshold: float = 2,
-                 forecast_days: int = 0,
                  smooth_kernel: tuple = (1/6, 2/3, 1/6),
                  confidence_interval: float = 0.95,
                  sparsity_check: bool = False,
                  debug: bool = False
                  ) -> None:
 
+        self.today = datetime.now()
+        _, last_day_of_month = calendar.monthrange(self.today.year, self.today.month)
+        last_date_of_month = datetime(self.today.year, self.today.month, last_day_of_month)
+        self.forecast_days = (last_date_of_month - self.today).days + 1  # 오늘 포함하려면 +1
+
         self.cp_priors = cp_priors
         self.cp_proba_norm = cp_proba_norm
         self.cp_threshold = cp_threshold
-        self.forecast_days = forecast_days
         self.smooth_kernel = smooth_kernel
         self.confidence_interval = confidence_interval
         self.sparsity_check = sparsity_check
@@ -242,6 +247,61 @@ class Ensembler:
 
         return max_proba_cp, max_proba, i_changepoint, n_days
 
+    def detect_outliers(self, df, forecast):
+        """
+        이상치 탐지: 2가지 방식의 이상치를 추출하여 병합
+        Args:
+            df (pd.DataFrame): 입력 데이터프레임 (ds, y)
+            forecast (pd.DataFrame): Prophet 예측 결과
+        Returns:
+            outliers (list): 이상치로 판별된 날짜 리스트
+        """
+        # Prophet 신뢰구간 추출
+        yhat = forecast["yhat"]
+        yhat_lower_95 = forecast["yhat_lower"]
+        yhat_upper_95 = forecast["yhat_upper"]
+        yhat_lower_99 = forecast["yhat_lower"] - 2 * (yhat - yhat_lower_95)
+        yhat_upper_99 = forecast["yhat_upper"] + 2 * (yhat_upper_95 - yhat)
+
+        # 커널 컨볼루션 적용
+        smoothed_y = np.convolve(df["y"], self.smooth_kernel, mode="same")
+
+        # 이상치 판별
+        outliers_95 = df["ds"][
+            (smoothed_y < yhat_lower_95) | (smoothed_y > yhat_upper_95)
+            ].tolist()
+        outliers_99 = df["ds"][
+            (df["y"] < yhat_lower_99) | (df["y"] > yhat_upper_99)
+            ].tolist()
+
+        # 두 방식에서 탐지된 이상치 병합
+        return list(set(outliers_95 + outliers_99))
+
+    def forecast_month_performance(self, df, forecast):
+        """
+        현재 월의 마지막 날까지 성과 예측
+        Args:
+            df (pd.DataFrame): 입력 데이터프레임 (ds, y)
+            forecast (pd.DataFrame): Prophet 예측 결과
+        Returns:
+            actual_sum (float): 해당 월의 실제 y의 합계
+            predicted_sum (float): 해당 월의 예측 yhat의 합계
+        """
+        current_month = pd.to_datetime(df["ds"]).dt.month.max()
+        current_year = pd.to_datetime(df["ds"]).dt.year.max()
+
+        # 현재 월 필터링
+        mask = (pd.to_datetime(forecast["ds"]).dt.month == current_month) & \
+               (pd.to_datetime(forecast["ds"]).dt.year == current_year)
+        monthly_forecast = forecast[mask]
+        monthly_actual = df[df["ds"].isin(monthly_forecast["ds"])]
+
+        # 실제값과 예측값의 합계 계산
+        actual_sum = monthly_actual["y"].sum()
+        predicted_sum = monthly_forecast["yhat"].sum()
+
+        return actual_sum, predicted_sum
+
     def __call__(self, df: pd.DataFrame) -> Union[None, dict]:
         sanity = self.sanity_check(df)
         if not sanity:
@@ -261,10 +321,14 @@ class Ensembler:
             changepoints=[max_proba_cp],
         )
         fin_model.fit(df)
-        fin_future = fin_model.make_future_dataframe(periods=0)
+        fin_future = fin_model.make_future_dataframe(periods=self.forecast_days)
         fin_forecast = fin_model.predict(fin_future)
-        df_trend = pd.DataFrame({"ds": df["ds"], "trend": fin_forecast["trend"]})
 
+        outliers = self.detect_outliers(df, fin_forecast)
+        actual_sum, predicted_sum = self.forecast_month_performance(df, fin_forecast)
+
+        # 기존 결과 추출
+        df_trend = pd.DataFrame({"ds": df["ds"], "trend": fin_forecast["trend"]})
         pre_trend = df_trend.iloc[:i_cp]["trend"].tolist()
         post_trend = df_trend.iloc[i_cp:]["trend"].tolist()
         post_trend = [t for t in post_trend if not pd.isna(t)]
@@ -283,6 +347,11 @@ class Ensembler:
             "delta": delta,
             "p": round(max_proba, 2),
             "trend": fin_forecast["trend"].tolist(),
+            "outliers": outliers,
+            "performance": {
+                "actual_sum": actual_sum,
+                "predicted_sum": predicted_sum,
+            },
         }
 
 
