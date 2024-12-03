@@ -2,6 +2,7 @@
 from .train import train_prophet
 from .inference import inference_prophet
 from .ensemble import (
+    Ensembler,
     voting,
     proba_depreceted as proba,
     NoChangePointDetectedError,
