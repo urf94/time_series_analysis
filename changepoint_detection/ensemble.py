@@ -131,7 +131,7 @@ def proba_depreceted(
 
 class Ensembler:
     def __init__(self,
-                 cp_priors: Sequence = (0.005 * (5 * i) for i in range(1, 9)),
+                 cp_priors: Sequence = tuple(0.005 * (5 * i) for i in range(1, 9)),
                  cp_proba_norm: str = "z-score",
                  cp_threshold: float = 2,
                  forecast_days: int = 0,
@@ -242,12 +242,15 @@ class Ensembler:
 
         return max_proba_cp, max_proba, i_changepoint, n_days
 
-    def __call__(self, df) -> Union[None, dict]:
+    def __call__(self, df: pd.DataFrame) -> Union[None, dict]:
         sanity = self.sanity_check(df)
         if not sanity:
             return None
 
-        max_proba_cp, max_proba, i_cp, n_days = self.ensembles(df)
+        ensemble_result = self.ensembles(df)
+        if ensemble_result is None:
+            return None
+        max_proba_cp, max_proba, i_cp, n_days = ensemble_result
 
         fin_model = Prophet(
             changepoint_prior_scale=1,  # 필요에 따라 조정
@@ -258,7 +261,9 @@ class Ensembler:
             changepoints=[max_proba_cp],
         )
         fin_model.fit(df)
-        df_trend = pd.DataFrame({"ds": df["ds"], "trend": fin_model["trend"]})
+        fin_future = fin_model.make_future_dataframe(periods=0)
+        fin_forecast = fin_model.predict(fin_future)
+        df_trend = pd.DataFrame({"ds": df["ds"], "trend": fin_forecast["trend"]})
 
         pre_trend = df_trend.iloc[:i_cp]["trend"].tolist()
         post_trend = df_trend.iloc[i_cp:]["trend"].tolist()
@@ -277,7 +282,7 @@ class Ensembler:
             "k2": round(k2, 2),
             "delta": delta,
             "p": round(max_proba, 2),
-            "trend": fin_model["trend"].tolist(),
+            "trend": fin_forecast["trend"].tolist(),
         }
 
 
