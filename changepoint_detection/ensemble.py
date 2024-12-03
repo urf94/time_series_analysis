@@ -1,6 +1,7 @@
 import warnings
 import datetime
-from typing import Union, Optional
+from collections import defaultdict
+from typing import Union, Optional, Sequence
 import numpy as np
 import pandas as pd
 from prophet import Prophet
@@ -126,6 +127,158 @@ def proba_depreceted(
 
     # 결과 반환
     return {"n": n, "k": round(k, 2), "datetime": max_changepoint.date()}
+
+
+class Ensembler:
+    def __init__(self,
+                 cp_priors: Sequence = (0.005 * (5 * i) for i in range(1, 9)),
+                 cp_proba_norm: str = "z-score",
+                 cp_threshold: float = 2,
+                 forecast_days: int = 0,
+                 smooth_kernel: tuple = (1/6, 2/3, 1/6),
+                 confidence_interval: float = 0.95,
+                 sparsity_check: bool = False,
+                 debug: bool = False
+                 ) -> None:
+
+        self.cp_priors = cp_priors
+        self.cp_proba_norm = cp_proba_norm
+        self.cp_threshold = cp_threshold
+        self.forecast_days = forecast_days
+        self.smooth_kernel = smooth_kernel
+        self.confidence_interval = confidence_interval
+        self.sparsity_check = sparsity_check
+        self.debug = debug
+
+        self.norm_func = z_score_normalization if cp_proba_norm == "z-score" else softmax
+
+    def sanity_check(self, df) -> bool:
+        try:
+            df["ds"] = pd.to_datetime(df["ds"]).dt.strftime("%Y-%m-%d")
+        except Exception as e:
+            raise ValueError(f"Error converting 'ds' column to 'yyyy-mm-dd' format: {e}")
+
+        try:
+            df["y"] = df["y"].fillna(0)
+        except Exception as e:
+            raise ValueError(f"Error occurs during fill NA value with 0: {e}")
+
+        if len(df["ds"].unique()) < 90:
+            if self.debug:
+                print(f"Input data needs more than 90 data points.")
+            return False
+
+        if empty_point := sum(df["y"] == 0) > 45 and self.sparsity_check:
+            if self.debug:
+                print(f"Input data is too sparse. {empty_point} points is empty.")
+            return False
+        return True
+
+    def ensembles(self, df, method='soft'):
+        n_scales = len(self.cp_priors)
+        pseudo_cps = defaultdict(float)
+
+        # 각 scale에 대해 Prophet 모델을 학습하고 changepoints 및 proba 추출
+        for scale in self.cp_priors:
+            model = Prophet(
+                changepoint_prior_scale=scale,
+                changepoint_range=1.0,
+                daily_seasonality=False,
+                yearly_seasonality=False,
+            )
+            model.fit(df)
+
+            proba = self.norm_func(np.abs(np.nanmean(model.params["delta"], axis=0)))
+            proba = np.where(proba < self.cp_threshold, 0, proba)
+            if self.debug:
+                print(f"Filtered proba with scale {scale} : {proba}")
+
+            # changepoints와 proba를 pseudo_cps에 누적
+            for i, changepoint in enumerate(model.changepoints):
+                changepoint = str(changepoint.date())
+                pseudo_cps[changepoint] += proba[i] / n_scales
+        return self.postprocessing(df, pseudo_cps)
+
+    def postprocessing(self, df, cp_candidates: dict):
+        # changepoint thresholding
+        if self.debug:
+            print(f"Pseudo CPs before thresholding: {cp_candidates}")
+
+        pseudo_cps = {cp: prob for cp, prob in cp_candidates.items() if prob >= self.cp_threshold}
+        if self.debug:
+            print(f"Pseudo CPs after thresholding: {pseudo_cps}")
+
+        if not pseudo_cps:
+            if self.debug:
+                print("No changepoint meets the threshold.")
+            return None
+
+        max_proba_cp = max(pseudo_cps, key=pseudo_cps.get)
+        max_proba = pseudo_cps[max_proba_cp]
+
+        # N: timestamp interval (changepoint ~ last)
+        last_datetime_str = df["ds"].max()
+        last_datetime = datetime.datetime.strptime(last_datetime_str, "%Y-%m-%d")
+        changepoint_datetime = datetime.datetime.strptime(max_proba_cp, "%Y-%m-%d")
+        n_days = (last_datetime - changepoint_datetime).days
+
+        if (n_days < len(df) * 0.1) or (n_days > len(df) * 0.9):
+            if self.debug:
+                print(f"Changepoint {max_proba_cp} is too close to the end. n_days: {n_days}")
+            return None
+
+        try:
+            i_changepoint = df["ds"].tolist().index(max_proba_cp)
+        except ValueError:
+            # Change point not found in 'ds' column
+            if self.debug:
+                print(f"Cannot find changepoint {max_proba_cp} in 'ds' column.")
+            return None
+
+        if i_changepoint < 2 or len(df) - i_changepoint < 2:
+            if self.debug:
+                print("Insufficient data points before or after changepoint.")
+            return None
+
+        return max_proba_cp, max_proba, i_changepoint, n_days
+
+    def __call__(self, df) -> Union[None, dict]:
+        sanity = self.sanity_check(df)
+        if not sanity:
+            return None
+
+        max_proba_cp, max_proba, i_cp, n_days = self.ensembles(df)
+
+        fin_model = Prophet(
+            changepoint_prior_scale=1,  # 필요에 따라 조정
+            changepoint_range=1.0,
+            interval_width=self.confidence_interval,
+            daily_seasonality=False,
+            yearly_seasonality=False,
+            changepoints=[max_proba_cp],
+        )
+        fin_model.fit(df)
+        df_trend = pd.DataFrame({"ds": df["ds"], "trend": fin_model["trend"]})
+
+        pre_trend = df_trend.iloc[:i_cp]["trend"].tolist()
+        post_trend = df_trend.iloc[i_cp:]["trend"].tolist()
+        post_trend = [t for t in post_trend if not pd.isna(t)]
+
+        k1 = (pre_trend[-1] - pre_trend[0]) / (len(pre_trend) - 1)
+        k2 = (post_trend[-1] - post_trend[0]) / (len(post_trend) - 1)
+
+        delta = round(100 * k2 / k1, 2) if k1 * k2 > 0 else None
+
+        # 결과 반환
+        return {
+            "n": n_days,
+            "datetime": max_proba_cp,
+            "k1": round(k1, 2),
+            "k2": round(k2, 2),
+            "delta": delta,
+            "p": round(max_proba, 2),
+            "trend": fin_model["trend"].tolist(),
+        }
 
 
 def change_point_with_proba(
