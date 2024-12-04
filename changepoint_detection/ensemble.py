@@ -534,7 +534,7 @@ def proba_w_post(
 ):
     pre_datetime = kwargs.get("pre_changepoint")
     if method == "past":
-        inference = proba_depreceted(df, norm_method, th)
+        inference = Ensembler(cp_priors=scales, cp_proba_norm=norm_method, cp_threshold=th)(df)
     elif method == "auto":
         inference = change_point_with_proba(
             df, scales=scales, norm_method=norm_method, th=th, **kwargs
