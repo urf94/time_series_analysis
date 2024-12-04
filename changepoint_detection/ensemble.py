@@ -1,6 +1,5 @@
 import warnings
 import datetime
-from datetime import datetime
 import calendar
 from collections import defaultdict
 from typing import Union, Optional, Sequence
@@ -137,21 +136,21 @@ class Ensembler:
                  cp_proba_norm: str = "z-score",
                  cp_threshold: float = 2,
                  smooth_kernel: tuple = (1/6, 2/3, 1/6),
-                 confidence_interval: float = 0.95,
+                 confidence_intervals: tuple = (0.95, 0.99),
                  sparsity_check: bool = False,
                  debug: bool = False
                  ) -> None:
 
-        self.today = datetime.now()
+        self.today = datetime.datetime.now()
         _, last_day_of_month = calendar.monthrange(self.today.year, self.today.month)
-        last_date_of_month = datetime(self.today.year, self.today.month, last_day_of_month)
+        last_date_of_month = datetime.datetime(self.today.year, self.today.month, last_day_of_month)
         self.forecast_days = (last_date_of_month - self.today).days + 1  # 오늘 포함하려면 +1
 
         self.cp_priors = cp_priors
         self.cp_proba_norm = cp_proba_norm
         self.cp_threshold = cp_threshold
         self.smooth_kernel = smooth_kernel
-        self.confidence_interval = confidence_interval
+        self.confidence_intervals = confidence_intervals
         self.sparsity_check = sparsity_check
         self.debug = debug
 
@@ -247,7 +246,7 @@ class Ensembler:
 
         return max_proba_cp, max_proba, i_changepoint, n_days
 
-    def detect_outliers(self, df, forecast):
+    def detect_outliers(self, df):
         """
         이상치 탐지: 2가지 방식의 이상치를 추출하여 병합
         Args:
@@ -256,26 +255,32 @@ class Ensembler:
         Returns:
             outliers (list): 이상치로 판별된 날짜 리스트
         """
-        # Prophet 신뢰구간 추출
-        yhat = forecast["yhat"]
-        yhat_lower_95 = forecast["yhat_lower"]
-        yhat_upper_95 = forecast["yhat_upper"]
-        yhat_lower_99 = forecast["yhat_lower"] - 2 * (yhat - yhat_lower_95)
-        yhat_upper_99 = forecast["yhat_upper"] + 2 * (yhat_upper_95 - yhat)
+
+        conf_ = {}
+        for interval in self.confidence_intervals:
+            outlier_model = Prophet(
+                changepoint_prior_scale=1,  # 필요에 따라 조정
+                changepoint_range=1.0,
+                interval_width=interval,
+                daily_seasonality=False,
+                yearly_seasonality=False,
+            )
+            outlier_model.fit(df)
+            future_ = outlier_model.make_future_dataframe(periods=0)
+            forecast_ = outlier_model.predict(future_)
+            conf_[interval] = (forecast_["yhat_lower"], forecast_["yhat_upper"])
 
         # 커널 컨볼루션 적용
         smoothed_y = np.convolve(df["y"], self.smooth_kernel, mode="same")
 
         # 이상치 판별
-        outliers_95 = df["ds"][
-            (smoothed_y < yhat_lower_95) | (smoothed_y > yhat_upper_95)
-            ].tolist()
-        outliers_99 = df["ds"][
-            (df["y"] < yhat_lower_99) | (df["y"] > yhat_upper_99)
-            ].tolist()
-
+        i_out95 = (smoothed_y < conf_[0.95][0]) | (smoothed_y > conf_[0.95][1])
+        i_out99 = (df["y"] < conf_[0.99][0]) | (df["y"] > conf_[0.99][1])
+        out95 = set(df["ds"][i_out95])
+        out99 = set(df["ds"][i_out99])
+        out = out95.union(out99)
         # 두 방식에서 탐지된 이상치 병합
-        return list(set(outliers_95 + outliers_99))
+        return out
 
     def forecast_month_performance(self, df, forecast):
         """
@@ -297,10 +302,12 @@ class Ensembler:
         monthly_actual = df[df["ds"].isin(monthly_forecast["ds"])]
 
         # 실제값과 예측값의 합계 계산
-        actual_sum = monthly_actual["y"].sum()
-        predicted_sum = monthly_forecast["yhat"].sum()
+        actual = monthly_actual["y"].sum()
+        predict = actual + monthly_forecast["yhat"].sum()
+        predict_lower = actual + monthly_forecast["yhat_lower"].sum()
+        predict_upper = actual + monthly_forecast["yhat_upper"].sum()
 
-        return actual_sum, predicted_sum
+        return {'actual': actual, 'predict': predict, 'predict_lower': predict_lower, 'predict_upper': predict_upper}
 
     def __call__(self, df: pd.DataFrame) -> Union[None, dict]:
         sanity = self.sanity_check(df)
@@ -311,11 +318,12 @@ class Ensembler:
         if ensemble_result is None:
             return None
         max_proba_cp, max_proba, i_cp, n_days = ensemble_result
-
+        outliers = self.detect_outliers(df)
+        #
         fin_model = Prophet(
             changepoint_prior_scale=1,  # 필요에 따라 조정
             changepoint_range=1.0,
-            interval_width=self.confidence_interval,
+            interval_width=0.80,
             daily_seasonality=False,
             yearly_seasonality=False,
             changepoints=[max_proba_cp],
@@ -324,8 +332,7 @@ class Ensembler:
         fin_future = fin_model.make_future_dataframe(periods=self.forecast_days)
         fin_forecast = fin_model.predict(fin_future)
 
-        outliers = self.detect_outliers(df, fin_forecast)
-        actual_sum, predicted_sum = self.forecast_month_performance(df, fin_forecast)
+        forecast_dict = self.forecast_month_performance(df, fin_forecast)
 
         # 기존 결과 추출
         df_trend = pd.DataFrame({"ds": df["ds"], "trend": fin_forecast["trend"]})
@@ -348,10 +355,7 @@ class Ensembler:
             "p": round(max_proba, 2),
             "trend": fin_forecast["trend"].tolist(),
             "outliers": outliers,
-            "performance": {
-                "actual_sum": actual_sum,
-                "predicted_sum": predicted_sum,
-            },
+            "forecast": forecast_dict,
         }
 
 
