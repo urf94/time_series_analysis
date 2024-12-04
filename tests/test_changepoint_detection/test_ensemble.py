@@ -2,7 +2,7 @@ import unittest
 import pandas as pd
 import numpy as np
 import datetime
-from changepoint_detection import proba, proba_w_post, change_point_with_proba
+from changepoint_detection import proba, proba_w_post, change_point_with_proba, Ensembler
 
 from test_samples.taylormade import ds as tm_ds, y as tm_y
 from test_samples.women09 import ds as wm_ds, y as wm_y
@@ -214,6 +214,20 @@ class TestChangePointDetectionFunctions(unittest.TestCase):
     def test_change_point_with_proba_with_threshold(self):
         """일정 threshold를 설정하고 change_point_with_proba 함수가 올바르게 작동하는지 확인"""
         result = change_point_with_proba(self.df, th=10)
+        result2 = Ensembler(cp_threshold=10).__call__(self.df)
+        # 임계값을 높게 설정했기 때문에 결과가 None일 가능성이 큼
+        self.assertIsNone(
+            result,
+            "The output should be None when the threshold is set high and no changepoint meets it.",
+        )
+        self.assertIsNone(
+            result2,
+            "The output should be None when the threshold is set high and no changepoint meets it.",
+        )
+
+    def test_change_point_with_proba_ensembler_comparison(self):
+        """일정 threshold를 설정하고 change_point_with_proba 함수가 올바르게 작동하는지 확인"""
+        result = change_point_with_proba(self.df, th=10)
         # 임계값을 높게 설정했기 때문에 결과가 None일 가능성이 큼
         self.assertIsNone(
             result,
@@ -271,6 +285,57 @@ class TestChangePointDetectionFunctions(unittest.TestCase):
             result["delta"], 280, "The 'delta' should be more than 280."
         )
         self.assertIsInstance(result["p"], float, "The value of 'p' should be a float.")
+
+    def test_change_point_with_proba_correctness(self):
+        """알려진 변화점을 가진 데이터에서 change_point_with_proba 함수가 이를 정확히 감지하는지 확인"""
+        # 변경점이 있는 데이터 생성
+        dates = pd.date_range(start="2023-01-01", periods=200, freq="D")
+        y = np.concatenate(
+            [np.arange(100) * 1, np.arange(100) * 3 + 100]
+        )  # 기울기 1에서 3으로 증가
+        test_df = pd.DataFrame({"ds": dates, "y": y})
+
+        result = Ensembler(cp_priors=[0.01, 0.05, 0.1])(test_df)
+
+        self.assertIsNotNone(
+            result,
+            "The output of change_point_with_proba should not be None for data with a change point.",
+        )
+        # 변화점이 약 100번째 날짜인지 확인 (실제 Prophet 감지 위치는 다를 수 있음)
+        expected_cp = dates[103].strftime("%Y-%m-%d")
+        self.assertEqual(
+            result["datetime"],
+            expected_cp,
+            f"The detected changepoint should be {expected_cp}.",
+        )
+        # 기울기와 n_days가 예상 범위에 있는지 확인
+        self.assertTrue(
+            90 <= result["n"] <= 110,
+            "The value of 'n' should be around 100 for this synthetic data.",
+        )
+        self.assertAlmostEqual(
+            result["k1"],
+            1.0,
+            places=1,
+            msg="The value of 'k1' should be approximately 1.0.",
+        )
+        self.assertAlmostEqual(
+            result["k2"],
+            3.0,
+            places=1,
+            msg="The value of 'k2' should be approximately 3.0.",
+        )
+        # self.assertGreaterEqual(
+        #     result["delta"], 190, "The 'delta' should be greater than 190."
+        # )
+        # self.assertLessEqual(
+        #     result["delta"], 210, "The 'delta' should be less than 210."
+        # )
+        self.assertGreater(
+            result["delta"], 280, "The 'delta' should be more than 280."
+        )
+        self.assertIsInstance(result["p"], float, "The value of 'p' should be a float.")
+
 
     def test_change_point_with_proba_delta_calculation_opposite_signs(self):
         """기울기가 변화점 이전에는 양수, 이후에는 음수인 데이터 생성"""
