@@ -29,108 +29,20 @@ def z_score_normalization(x):
     return z_scores
 
 
-def voting(df: pd.DataFrame):
-    # changepoint_prior_scale 값들을 정의 (default: 0.05)
-    scales = [0.005 * (5 * i) for i in range(1, 9)]  # 0.005, 0.025, 0.05, ..., 0.2
-    changepoints_list = []
-
-    # 각 scale에 대해 Prophet 모델을 학습하고 changepoints를 추출
-    for scale in scales:
-        model = Prophet(changepoint_prior_scale=scale)
-        model.fit(df)
-        forecast = model.predict(model.make_future_dataframe(periods=0))
-
-        # 모델에서 changepoints 추출
-        changepoints = model.changepoints
-        changepoints_list.extend(changepoints)
-
-    # 각 changepoint에 대해 voting
-    changepoint_counter = Counter(changepoints_list)
-    most_common_changepoint, _ = changepoint_counter.most_common(1)[0]
-    return most_common_changepoint
-
-
-def proba_depreceted(
-    df, norm_method: str = "z-score", th: float = 2
-) -> Union[None, dict]:
-    warnings.warn("'proba' function will be deprecated in future", DeprecationWarning)
-
-    # changepoint_prior_scale 값들을 정의
-    scales = [0.005 * (5 * i) for i in range(1, 9)]  # 0.005, 0.025, 0.05, ..., 0.2
-    n_scales = len(scales)
-    datetime_proba = {}
-    all_trends = []
-
-    # 각 scale에 대해 Prophet 모델을 학습하고 changepoints 및 proba 추출
-    for scale in scales:
-        model = Prophet(changepoint_prior_scale=scale, changepoint_range=1.0)
-        model.fit(df)
-
-        # 모델에서 changepoints 추출
-        changepoints = model.changepoints
-
-        # changepoints의 확률(proba) 계산
-        proba = np.abs(np.nanmean(model.params["delta"], axis=0))
-        if norm_method == "z-score":
-            proba = z_score_normalization(proba)
-        elif norm_method == "softmax":
-            proba = softmax(proba)
-        proba /= n_scales
-
-        # changepoints와 proba를 datetime_proba에 누적
-        for i, changepoint in enumerate(changepoints):
-            if changepoint in datetime_proba:
-                datetime_proba[changepoint] += proba[i]
-            else:
-                datetime_proba[changepoint] = proba[i]
-
-        # 각 모델의 trend 예측 결과 저장
-        future = model.make_future_dataframe(periods=0)
-        forecast = model.predict(future)
-        all_trends.append(forecast["trend"])
-
-    # 여러 모델로부터의 trend 평균 계산
-    avg_trend = pd.concat(all_trends, axis=1).mean(axis=1)
-
-    # 일정 임계값(threshold)을 넘는 changepoint들만 반환
-    results = [
-        changepoint for changepoint, proba in datetime_proba.items() if proba >= th
-    ]
-
-    if not results:
-        return None
-
-    max_changepoint = max(results)
-
-    # get partial data after changepoint
-    changepoint_index = forecast[forecast["ds"] == max_changepoint].index[0]
-    post_changepoint_trend = avg_trend.iloc[changepoint_index + 1 :]
-
-    # calculate min, max trend value
-    max_trend_after = post_changepoint_trend.max()  # 이후 데이터의 최대 trend 값
-    min_trend_after = post_changepoint_trend.min()  # 이후 데이터의 최소 trend 값
-
-    # trend value at changepoint
-    changepoint_trend = avg_trend.iloc[changepoint_index]
-
-    # K: delta trend
-    if max_trend_after - changepoint_trend >= changepoint_trend - min_trend_after:
-        k = (max_trend_after - changepoint_trend) / changepoint_trend * 100
-    else:
-        k = (min_trend_after - changepoint_trend) / changepoint_trend * 100
-
-    # N: timestamp interval (chagepoint ~ last)
-    last_datetime = df["ds"].max()
-    n = (last_datetime - max_changepoint).days
-
-    if n < len(df) * 0.1:
-        return None
-
-    # 결과 반환
-    return {"n": n, "k": round(k, 2), "datetime": max_changepoint.date()}
-
-
 class Ensembler:
+    """
+    Ensembler: Prophet 기반으로 시계열 데이터를 분석하고 변화점(changepoints) 및 이상치(outliers)를 탐지하며,
+    미래 성과 예측을 수행하는 클래스.
+
+    Attributes:
+        cp_priors (Sequence): Changepoint prior scale 값들의 리스트. 기본값은 [0.025, 0.05, ..., 0.2].
+        cp_proba_norm (str): 변화점 확률 계산에 사용할 정규화 함수. "z-score" 또는 "softmax".
+        cp_threshold (float): 변화점 확률에 대한 임계값. 이 값보다 낮은 확률은 무시됨.
+        smooth_kernel (tuple): 이상치 탐지를 위한 커널 컨볼루션의 가중치.
+        confidence_intervals (tuple): 이상치 탐지 시 사용할 Prophet 신뢰구간 (기본: 95%, 99%).
+        sparsity_check (bool): 데이터가 희소한지 확인하는 옵션. True일 경우 희소 데이터 검증 수행.
+        debug (bool): 디버그 모드. True일 경우 중간 과정 출력.
+    """
     def __init__(self,
                  cp_priors: Sequence = tuple(0.005 * (5 * i) for i in range(1, 9)),
                  cp_proba_norm: str = "z-score",
@@ -140,6 +52,18 @@ class Ensembler:
                  sparsity_check: bool = False,
                  debug: bool = False
                  ) -> None:
+        """
+        Initializes the Ensembler class.
+
+        Args:
+            cp_priors (Sequence): Changepoint prior scale 값들의 리스트.
+            cp_proba_norm (str): 변화점 확률 계산에 사용할 정규화 함수.
+            cp_threshold (float): 변화점 확률에 대한 임계값.
+            smooth_kernel (tuple): 이상치 탐지를 위한 커널 가중치.
+            confidence_intervals (tuple): Prophet 신뢰구간의 리스트.
+            sparsity_check (bool): 데이터 희소성 검사 여부.
+            debug (bool): 디버그 모드 활성화 여부.
+        """
 
         self.today = datetime.datetime.now()
         _, last_day_of_month = calendar.monthrange(self.today.year, self.today.month)
@@ -157,6 +81,15 @@ class Ensembler:
         self.norm_func = z_score_normalization if cp_proba_norm == "z-score" else softmax
 
     def sanity_check(self, df) -> bool:
+        """
+        데이터 유효성 검사를 수행.
+
+        Args:
+            df (pd.DataFrame): 입력 데이터프레임 (ds: 날짜, y: 값).
+
+        Returns:
+            bool: 데이터가 유효하면 True, 그렇지 않으면 False.
+        """
         try:
             df["ds"] = pd.to_datetime(df["ds"]).dt.strftime("%Y-%m-%d")
         except Exception as e:
@@ -179,6 +112,16 @@ class Ensembler:
         return True
 
     def ensembles(self, df, method='soft'):
+        """
+        여러 Prophet 모델을 학습하여 변화점 확률 계산 및 병합.
+
+        Args:
+            df (pd.DataFrame): 입력 데이터프레임 (ds: 날짜, y: 값).
+            method (str): 확률 병합 방식 (현재 미사용).
+
+        Returns:
+            dict: 후처리된 변화점 데이터.
+        """
         n_scales = len(self.cp_priors)
         pseudo_cps = defaultdict(float)
 
@@ -204,6 +147,16 @@ class Ensembler:
         return self.postprocessing(df, pseudo_cps)
 
     def postprocessing(self, df, cp_candidates: dict):
+        """
+        변화점 후보를 필터링 및 후처리.
+
+        Args:
+            df (pd.DataFrame): 입력 데이터프레임.
+            cp_candidates (dict): 변화점 후보 (changepoint와 확률의 딕셔너리).
+
+        Returns:
+            tuple: 가장 높은 확률의 변화점 정보 (날짜, 확률, 인덱스, 변화 이후 일수).
+        """
         # changepoint thresholding
         if self.debug:
             print(f"Pseudo CPs before thresholding: {cp_candidates}")
@@ -248,12 +201,13 @@ class Ensembler:
 
     def detect_outliers(self, df):
         """
-        이상치 탐지: 2가지 방식의 이상치를 추출하여 병합
+        Prophet 신뢰구간과 커널 컨볼루션을 기반으로 이상치를 탐지.
+
         Args:
-            df (pd.DataFrame): 입력 데이터프레임 (ds, y)
-            forecast (pd.DataFrame): Prophet 예측 결과
+            df (pd.DataFrame): 입력 데이터프레임 (ds: 날짜, y: 값).
+
         Returns:
-            outliers (list): 이상치로 판별된 날짜 리스트
+            set: 이상치로 탐지된 날짜들의 집합.
         """
 
         conf_ = {}
@@ -284,13 +238,14 @@ class Ensembler:
 
     def forecast_month_performance(self, df, forecast):
         """
-        현재 월의 마지막 날까지 성과 예측
+        현재 월의 마지막 날까지 성과 예측.
+
         Args:
-            df (pd.DataFrame): 입력 데이터프레임 (ds, y)
-            forecast (pd.DataFrame): Prophet 예측 결과
+            df (pd.DataFrame): 입력 데이터프레임 (ds: 날짜, y: 값).
+            forecast (pd.DataFrame): Prophet 예측 결과.
+
         Returns:
-            actual_sum (float): 해당 월의 실제 y의 합계
-            predicted_sum (float): 해당 월의 예측 yhat의 합계
+            dict: 실제 값 및 예측 값의 합계와 신뢰구간.
         """
         current_month = pd.to_datetime(df["ds"]).dt.month.max()
         current_year = pd.to_datetime(df["ds"]).dt.year.max()
@@ -310,6 +265,24 @@ class Ensembler:
         return {'actual': actual, 'predict': predict, 'predict_lower': predict_lower, 'predict_upper': predict_upper}
 
     def __call__(self, df: pd.DataFrame) -> Union[None, dict]:
+        """
+        Ensembler 클래스를 호출하여 전체 프로세스를 실행.
+
+        Args:
+            df (pd.DataFrame): 입력 데이터프레임 (ds: 날짜, y: 값).
+
+        Returns:
+            dict: 분석 결과. 포함되는 항목:
+                - n (int): 변화 이후 일수.
+                - datetime (str): 변화점 날짜.
+                - k1 (float): 변화 이전의 기울기.
+                - k2 (float): 변화 이후의 기울기.
+                - delta (float): 기울기 변화율.
+                - p (float): 변화점 확률.
+                - trend (list): 예측된 추세.
+                - outliers (set): 이상치 날짜 집합.
+                - forecast (dict): 월별 성과 예측 결과 (실제 값, 예측 값, 신뢰구간).
+        """
         sanity = self.sanity_check(df)
         if not sanity:
             return None
